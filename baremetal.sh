@@ -116,9 +116,49 @@ log "Installing kernel build deps..."
 for pkg in flex bison perl libelf pkgconf; do
     kiss l "$pkg" >/dev/null 2>&1 && ok "$pkg installed" || { kiss b "$pkg" && kiss i "$pkg" || warn "$pkg failed"; }
 done
+
+kopt() {
+    _k="$1" _v="${2:-y}"
+    grep -qE "^${_k}=" .config 2>/dev/null && sed -i "s|^${_k}=.*|${_k}=${_v}|" .config \
+    || { grep -qE "^# ${_k} is not set" .config 2>/dev/null && sed -i "s|^# ${_k} is not set|${_k}=${_v}|" .config; } \
+    || echo "${_k}=${_v}" >> .config
+}
+
+log "Downloading kernel source..."
+mkdir -p /usr/src; cd /usr/src
+curl -sLO https://mirrors.edge.kernel.org/pub/linux/kernel/v7.x/linux-7.0.10.tar.xz
+tar xf linux-7.0.10.tar.xz; cd linux-7.0.10
+
+log "Configuring kernel..."
+make defconfig
+
+kopt CONFIG_BLK_DEV_SD; kopt CONFIG_BLK_DEV_NVME
+kopt CONFIG_EXT4_FS; kopt CONFIG_EFI_STUB
+kopt CONFIG_CFG80211 m; kopt CONFIG_MAC80211 m
+kopt CONFIG_WLAN; kopt CONFIG_WLAN_VENDOR_INTEL
+kopt CONFIG_IWLWIFI m; kopt CONFIG_IWLMVM m
+kopt CONFIG_SND; kopt CONFIG_SND_HDA_INTEL m
+kopt CONFIG_SND_HDA_CODEC_HDMI m; kopt CONFIG_SND_HDA_CODEC_REALTEK m; kopt CONFIG_SND_HDA_CODEC_GENERIC m
+kopt CONFIG_SND_SOC; kopt CONFIG_SND_SOC_SOF_TOPLEVEL
+kopt CONFIG_SND_SOC_SOF_PCI m; kopt CONFIG_SND_SOC_SOF_INTEL_TOPLEVEL; kopt CONFIG_SND_SOC_SOF_INTEL_TGL m
+kopt CONFIG_MOUSE_PS2; kopt CONFIG_MOUSE_PS2_SYNAPTICS; kopt CONFIG_MOUSE_PS2_ELAN; kopt CONFIG_MOUSE_PS2_SMBUS
+kopt CONFIG_HID; kopt CONFIG_HID_GENERIC; kopt CONFIG_HID_MULTITOUCH m
+kopt CONFIG_I2C; kopt CONFIG_I2C_HID m; kopt CONFIG_I2C_DESIGNWARE_PLATFORM m; kopt CONFIG_I2C_DESIGNWARE_PCI m
+kopt CONFIG_USB_XHCI_HCD; kopt CONFIG_USB_EHCI_HCD
+kopt CONFIG_FB; kopt CONFIG_FB_EFI; kopt CONFIG_FRAMEBUFFER_CONSOLE
+kopt CONFIG_FONT_SUPPORT; kopt CONFIG_FONT_8x16
+kopt CONFIG_TMPFS; kopt CONFIG_DEVTMPFS; kopt CONFIG_INOTIFY_USER; kopt CONFIG_MODULES
+
+make olddefconfig
+
 log "Building kernel..."
-kiss build kernel && kiss install kernel && ok "kernel installed" || warn "kernel build failed"
-KVERSION=$(ls /boot/vmlinuz-* 2>/dev/null | head -1 | sed 's|/boot/vmlinuz-||')
+make -j"$(nproc 2>/dev/null || echo 2)" bzImage modules
+make modules_install
+KVERSION=$(make kernelversion)
+cp arch/x86/boot/bzImage "/boot/vmlinuz-$KVERSION"
+cp System.map "/boot/System.map-$KVERSION"
+cp .config "/boot/config-$KVERSION"
+ok "Kernel $KVERSION installed"
 
 echo ""
 log "=== Step 6: Install firmware ==="
@@ -138,7 +178,7 @@ kiss build freetype-harfbuzz && kiss install freetype-harfbuzz && ok "freetype-h
 
 echo ""
 log "=== Step 8: Build packages ==="
-for pkg in fontconfig libpng xorgproto libXau libXdmcp libxcb xcb-proto xtrans xorg-util-macros libX11 libXext libXfixes libXi libXtst libfontenc libXfont tinyx xf86-video-intel xf86-input-libinput xkeyboard-config sowm st sx; do
+for pkg in fontconfig libpng xorgproto libXau libXdmcp libxcb xcb-proto xtrans xorg-util-macros libX11 libXext libXfixes libXi libXtst libfontenc libXfont tinyx xf86-video-intel xf86-input-libinput xkeyboard-config sowm st sx-git; do
     kiss search "$pkg" >/dev/null 2>&1 || { warn "$pkg not found"; continue; }
     log "Building $pkg..."
     kiss build "$pkg" && kiss install "$pkg" && ok "$pkg" || warn "$pkg failed"
