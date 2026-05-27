@@ -26,8 +26,13 @@ rm -rf /tmp/yay
 ok "yay installed"
 
 log "=== Install AUR packages (sowm, st) ==="
-su - xo -c 'yay -S --noconfirm sowm st'
-ok "sowm and st installed"
+for pkg in sowm st; do
+    log "Building $pkg..."
+    su - xo -c "cd /tmp && git clone https://aur.archlinux.org/$pkg.git && cd $pkg && makepkg -s --noconfirm"
+    pacman -U --noconfirm /tmp/$pkg/$pkg-*.pkg.tar.zst
+    rm -rf /tmp/$pkg
+    ok "$pkg installed"
+done
 
 log "=== Configure X session ==="
 cat > /home/xo/.xinitrc << 'XEOF'
