@@ -5,14 +5,10 @@ log()  { printf '\033[32m->\033[m %s\n' "$*"; }
 ok()   { printf '\033[32mOK\033[m  %s\n' "$*"; }
 warn() { printf '\033[33m!>\033[m %s\n' "$*"; }
 
-log "=== Start NetworkManager manually ==="
-NetworkManager &
-sleep 3
-ok "NetworkManager running"
-
-log "=== Connect to WiFi (nmtui) ==="
-nmtui
-ok "WiFi configured"
+log "=== Enable NetworkManager (for after reboot) ==="
+ln -sf /usr/lib/systemd/system/NetworkManager.service /etc/systemd/system/multi-user.target.wants/
+ln -sf /usr/lib/systemd/system/NetworkManager-wait-online.service /etc/systemd/system/network-online.target.wants/
+ok "NetworkManager will start on boot"
 
 log "=== Install yay (AUR helper) ==="
 su - xo -c '
