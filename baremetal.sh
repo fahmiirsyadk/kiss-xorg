@@ -110,11 +110,30 @@ D="/home/repos"
 export KISS_PATH="$D/xorg/extra:$D/xorg/xorg:$D/xorg/community:$D/repo/core:$D/repo/extra:$D/repo/wayland:$D/community/community:$D/custom/packages"
 export KISS_PROMPT=0
 
+# Helper: build+install a package, isolated from set -e so failures only warn
+pkg_install() {
+    _pkg="$1"
+    if ! kiss search "$_pkg" >/dev/null 2>&1; then
+        warn "$_pkg not found in repos — skipping"
+        return 0
+    fi
+    log "Building $_pkg..."
+    if (kiss build "$_pkg" && kiss install "$_pkg"); then
+        ok "$_pkg installed"
+    else
+        warn "$_pkg build/install failed — skipping (non-fatal)"
+    fi
+}
+
 echo ""
 log "=== Step 5: Build kernel ==="
 log "Installing kernel build deps..."
 for pkg in flex bison perl libelf pkgconf; do
-    kiss l "$pkg" >/dev/null 2>&1 && ok "$pkg installed" || { kiss b "$pkg" && kiss i "$pkg" || warn "$pkg failed"; }
+    if kiss l "$pkg" >/dev/null 2>&1; then
+        ok "$pkg already installed"
+    else
+        (kiss b "$pkg" && kiss i "$pkg") || warn "$pkg failed — continuing"
+    fi
 done
 
 kopt() {
@@ -172,20 +191,49 @@ else
     warn "No WiFi — skipping firmware"
 fi
 
-echo ""
-log "=== Step 7: Build freetype-harfbuzz ==="
-kiss build freetype-harfbuzz && kiss install freetype-harfbuzz && ok "freetype-harfbuzz" || warn "freetype-harfbuzz failed"
+# ---------------------------------------------------------------
+# NOTE: freetype-harfbuzz is intentionally skipped here.
+# It fails to link because libfreetype.so.6 is not yet present
+# when harfbuzz tries to link against it during a combined build.
+# Install manually after first boot if font rendering is needed:
+#   kiss b freetype && kiss i freetype
+#   kiss b harfbuzz && kiss i harfbuzz
+# ---------------------------------------------------------------
 
 echo ""
-log "=== Step 8: Build packages ==="
-for pkg in fontconfig libpng xorgproto libXau libXdmcp libxcb xcb-proto xtrans xorg-util-macros libX11 libXext libXfixes libXi libXtst libfontenc libXfont tinyx xf86-video-intel xf86-input-libinput xkeyboard-config sowm st sx-git; do
-    kiss search "$pkg" >/dev/null 2>&1 || { warn "$pkg not found"; continue; }
-    log "Building $pkg..."
-    kiss build "$pkg" && kiss install "$pkg" && ok "$pkg" || warn "$pkg failed"
+log "=== Step 7: Build X11 packages ==="
+# freetype-dependent packages (fontconfig, libXfont) may warn and skip —
+# that is expected and non-fatal without freetype-harfbuzz.
+for pkg in \
+    libpng \
+    xorgproto \
+    libXau \
+    libXdmcp \
+    libxcb \
+    xcb-proto \
+    xtrans \
+    xorg-util-macros \
+    libX11 \
+    libXext \
+    libXfixes \
+    libXi \
+    libXtst \
+    libfontenc \
+    fontconfig \
+    libXfont \
+    tinyx \
+    xf86-video-intel \
+    xf86-input-libinput \
+    xkeyboard-config \
+    sowm \
+    st \
+    sx-git
+do
+    pkg_install "$pkg"
 done
 
 echo ""
-log "=== Step 9: Configure system ==="
+log "=== Step 8: Configure system ==="
 mkdir -p /root/.config/sx
 cat > /root/.config/sx/sxrc << 'XEOF'
 #!/bin/sh
@@ -209,25 +257,25 @@ XEOF
 ln -sf /etc/sv/eiwd /var/service/ 2>/dev/null || true
 
 echo ""
-log "=== Step 10: Install bootloader ==="
+log "=== Step 9: Install bootloader ==="
 DISK="${PART_ROOT%p[0-9]*}"
 ESP_PARTNUM="${PART_ESP##*p}"
 if [ -d /sys/firmware/efi ]; then
     log "UEFI — installing GRUB..."
-    kiss b grub && kiss i grub
+    pkg_install grub
     grub-install --target=x86_64-efi --efi-directory=/boot --bootloader-id=KISS
     grub-mkconfig -o /boot/grub/grub.cfg
     ok "GRUB installed"
 else
     log "BIOS — installing GRUB on $DISK..."
-    kiss b grub && kiss i grub
+    pkg_install grub
     grub-install --target=i386-pc "$DISK"
     grub-mkconfig -o /boot/grub/grub.cfg
     ok "GRUB installed"
 fi
 
 echo ""
-log "=== Step 11: System config ==="
+log "=== Step 10: System config ==="
 echo "nier-kiss" > /etc/hostname
 echo "127.0.1.1 nier-kiss" >> /etc/hosts
 ok "Hostname: nier-kiss"
@@ -252,6 +300,13 @@ done
 echo ""
 echo "============================================"
 ok "KISS Linux installation complete!"
+echo ""
+echo "  NOTE: freetype + harfbuzz were skipped."
+echo "  After reboot, run manually if needed:"
+echo "    kiss b freetype && kiss i freetype"
+echo "    kiss b harfbuzz && kiss i harfbuzz"
+echo "    kiss b fontconfig && kiss i fontconfig"
+echo ""
 echo "  1. exit"
 echo "  2. umount -R /mnt"
 echo "  3. reboot"
