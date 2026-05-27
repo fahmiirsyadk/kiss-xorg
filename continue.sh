@@ -10,31 +10,7 @@ ln -sf /usr/lib/systemd/system/NetworkManager.service /etc/systemd/system/multi-
 ln -sf /usr/lib/systemd/system/NetworkManager-wait-online.service /etc/systemd/system/network-online.target.wants/
 ok "NetworkManager will start on boot"
 
-log "=== Install Go (required for yay) ==="
-pacman -S --noconfirm --needed go
-ok "Go installed"
-
-log "=== Install yay (AUR helper) ==="
-su - xo -c '
-cd /tmp
-git clone https://aur.archlinux.org/yay.git
-cd yay
-makepkg -s --noconfirm
-'
-pacman -U --noconfirm /tmp/yay/yay-*.pkg.tar.zst
-rm -rf /tmp/yay
-ok "yay installed"
-
-log "=== Install AUR packages (sowm, st) ==="
-for pkg in sowm st; do
-    log "Building $pkg..."
-    su - xo -c "cd /tmp && git clone https://aur.archlinux.org/$pkg.git && cd $pkg && makepkg -s --noconfirm"
-    pacman -U --noconfirm /tmp/$pkg/$pkg-*.pkg.tar.zst
-    rm -rf /tmp/$pkg
-    ok "$pkg installed"
-done
-
-log "=== Configure X session ==="
+log "=== Configure X session for xo ==="
 cat > /home/xo/.xinitrc << 'XEOF'
 #!/bin/sh
 exec sowm
@@ -60,15 +36,13 @@ ok "X session configured"
 
 echo ""
 echo "============================================"
-ok "Arch Linux installation complete!"
+ok "Chroot setup complete!"
 echo ""
 echo "  Next steps:"
 echo "  1. exit"
 echo "  2. umount -R /mnt"
 echo "  3. reboot"
 echo ""
-echo "  After reboot:"
-echo "  - Login as xo"
-echo "  - X will auto-start on tty1"
-echo "  - Use nmtui to manage WiFi"
+echo "  After reboot, login as xo then run:"
+echo "  bash <(curl -fsSL https://raw.githubusercontent.com/fahmiirsyadk/kiss/master/setup/post-install.sh)"
 echo "============================================"
