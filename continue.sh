@@ -10,15 +10,19 @@ ln -sf /usr/lib/systemd/system/NetworkManager.service /etc/systemd/system/multi-
 ln -sf /usr/lib/systemd/system/NetworkManager-wait-online.service /etc/systemd/system/network-online.target.wants/
 ok "NetworkManager will start on boot"
 
+log "=== Install Go (required for yay) ==="
+pacman -S --noconfirm --needed go
+ok "Go installed"
+
 log "=== Install yay (AUR helper) ==="
 su - xo -c '
 cd /tmp
 git clone https://aur.archlinux.org/yay.git
 cd yay
-makepkg -si --noconfirm
-cd /tmp
-rm -rf yay
+makepkg -s --noconfirm
 '
+pacman -U --noconfirm /tmp/yay/yay-*.pkg.tar.zst
+rm -rf /tmp/yay
 ok "yay installed"
 
 log "=== Install AUR packages (sowm, st) ==="
